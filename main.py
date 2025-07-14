@@ -3,12 +3,14 @@ import sys
 import math
 from textures import load_textures
 from sound_manager import SoundManager
+from UImanager import draw_ui
 
 # Ρυθμίσεις παραθύρου και χάρτη
 SCREEN_HEIGHT = 480
 SCREEN_WIDTH = SCREEN_HEIGHT * 2
 MAP_SIZE = 8
 TILE_SIZE = int(SCREEN_HEIGHT / MAP_SIZE)
+WALL = 21000
 
 # Παίκτης
 player_x = SCREEN_WIDTH / 4
@@ -25,7 +27,6 @@ MAX_DEPTH = SCREEN_HEIGHT
 SCALE = (SCREEN_WIDTH / 2) / CASTED_RAYS
 
 # Ενέργειες
-#place_block = False
 remove_block = False
 game_won= False
 game_over = False
@@ -87,7 +88,7 @@ player_lives = 4
 
 
 def cast_rays():
-    global place_block, remove_block, current_target, message, message_timer
+    global  remove_block, current_target, message, message_timer
     start_angle = player_angle - HALF_FOV
 
     for ray in range(CASTED_RAYS):
@@ -114,7 +115,7 @@ def cast_rays():
 
                     # 3D προβολή
                     corrected_depth = depth * math.cos(player_angle - start_angle)
-                    wall_height = min(21000 / (corrected_depth + 0.0001), SCREEN_HEIGHT)
+                    wall_height = min(WALL / (corrected_depth + 0.0001), SCREEN_HEIGHT)
                     
                     shade = 255 / (1 + corrected_depth * corrected_depth * 0.001)
                     color = (shade, shade, shade) if tile == "#" else (180, 180, 180)
@@ -174,23 +175,11 @@ def cast_rays():
                                 message_timer = pg.time.get_ticks()
                                 sound.play_wrong()
                                 remove_block = False
-                                global player_lives, game_won  # <-- προσθήκη
+                                global player_lives, game_won, game_over
                                 player_lives -= 1
                                 if player_lives <= 0:
                                     game_over = True
                                 
-                        '''                 
-                        if remove_block and tile.isdigit():
-                            MAP[row] = MAP[row][:col] + ' ' + MAP[row][col+1:]
-                            remove_block = False
-
-                        
-                        # Τοποθέτηση block στο προηγούμενο κενό tile
-                        if place_block and last_row is not None and last_col is not None:
-                            if MAP[last_row][last_col] == ' ':
-                                MAP[last_row] = MAP[last_row][:last_col] + '1' + MAP[last_row][last_col+1:]
-                                place_block = False
-                        '''
                     break # ΟΠΟΙΑΔΗΠΟΤΕ ακτίνα βλέπει εμπόδιο, σταματά εκεί
 
                         
@@ -220,6 +209,7 @@ def draw_map():
 forward = True
 message = ""  # Μήνυμα που εμφανίζεται στον χρήστη
 message_timer = 0 
+end_time = None
 
 # Loop παιχνιδιού
 while True:
@@ -228,8 +218,6 @@ while True:
             pg.quit()
             sys.exit()
         if event.type == pg.KEYDOWN:
-            #if event.key == pg.K_e:
-            #    place_block = True
             if event.key == pg.K_e:
                 remove_block = True
 
@@ -270,83 +258,51 @@ while True:
     # Ζωγραφική
     win.fill((0, 0, 0))
     draw_map()
-    
-    # Πρώιμο UI
-    font = pg.font.SysFont(None, 24)
-    font2 = pg.font.SysFont(None, 40)
-        
-    text = font.render(f"Level: {current_target}", True, (255, 255, 255))
-    win.blit(text, (10, SCREEN_HEIGHT - 30))
-    
-    status =  f"1:{found_blocks['1']}/{MAX_PER_CATEGORY}  2:{found_blocks['2']}/{MAX_PER_CATEGORY}  3:{found_blocks['3']}/{MAX_PER_CATEGORY}"
-    status_text = font.render(status, True, (180, 180, 180))
-    win.blit(status_text, (150, SCREEN_HEIGHT - 30))
-    
-    if message and pg.time.get_ticks() - message_timer < 1500:
-        msg_text = font.render(message, True, (255, 255, 0))
-        win.blit(msg_text, (10, SCREEN_HEIGHT - 60))
-    else:
-        message = ""
-        
 
     # Πάτωμα
     floor_tex = textures['floor']
     floor_tex_scaled = pg.transform.scale(floor_tex, (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
     win.blit(floor_tex_scaled, (SCREEN_HEIGHT, SCREEN_HEIGHT // 2))
+    
     #Ταβανι
     pg.draw.rect(win, (200, 200, 200), (SCREEN_HEIGHT, -SCREEN_HEIGHT / 2, SCREEN_HEIGHT, SCREEN_HEIGHT))
 
     cast_rays()
-    
-    # Μήνυμα καθοδήγησης ανά επίπεδο
-    instruction = ""
-    color = (255, 255, 255)  # default white
-
-    if current_target == 1:
-        instruction = "You must find all YELLOW items"
-        color = (255, 255, 0)  # yellow
-    elif current_target == 2:
-        instruction = "Great, now you must find all RED items"
-        color = (255, 0, 0)    # red
-    elif current_target == 3:
-        instruction = "And finally you must find all BLUE items"
-        color = (0, 128, 255)  # blue
-
-    if instruction:
-        instruction_text = font.render(instruction, True, color)
-        win.blit(instruction_text, (SCREEN_WIDTH - instruction_text.get_width() - 10, 10))
-        
-    # Εμφάνιση ζωών (life icons) πάνω δεξιά
-    life_icon = textures['life']
-    for i in range(player_lives):
-        x = 10 + i * 40  # Από δεξιά προς τα αριστερά
-        y = 10
-        win.blit(life_icon, (x, y))
+    draw_ui(
+    win=win,
+    textures=textures,
+    SCREEN_WIDTH=SCREEN_WIDTH,
+    SCREEN_HEIGHT=SCREEN_HEIGHT,
+    current_target=current_target,
+    found_blocks=found_blocks,
+    MAX_PER_CATEGORY=MAX_PER_CATEGORY,
+    message=message,
+    message_timer=message_timer,
+    player_lives=player_lives,
+    game_won=game_won,
+    game_over=game_over
+)
     
     # Κουκίδα στόχευσης στο κέντρο της 3D προβολής
     center_x = SCREEN_HEIGHT + (SCREEN_WIDTH - SCREEN_HEIGHT) // 2
     center_y = SCREEN_HEIGHT // 2
     pg.draw.circle(win, (255, 0, 0), (center_x, center_y), 4)
     
-    # ΕΛΕΓΧΟΣ ΣΥΝΘΗΚΗΣ ΗΤΤΑΣ
+    # Έλεγχος συνθηκών νίκης/ήττας
     if player_lives <= 0:
         game_over = True
-        game_over_msg = font2.render("Game Over - Try Again!", True, (255, 0, 0))
-        win.blit(game_over_msg, (SCREEN_HEIGHT // 2 - 100, SCREEN_HEIGHT // 2 - 20))
-    
-    # ΕΛΕΓΧΟΣ ΣΥΝΘΗΚΗΣ ΝΙΚΗΣ
+
     if all(found_blocks[str(k)] >= MAX_PER_CATEGORY for k in range(1, 4)):
         game_won = True
+    
+    if (game_over or game_won) and end_time is None:
+        end_time = pg.time.get_ticks()  # ξεκινάει η αντίστροφη μέτρηση
 
-    if game_won:
-        win_msg = font2.render("Congratulations, You are the Master of Colors", True, (125, 215, 0))
-        win.blit(win_msg, (SCREEN_HEIGHT // 2 - 100 , SCREEN_HEIGHT // 2 - 20))
-        
-    if game_over or game_won:
-        pg.display.flip()
-        pg.time.wait(3000)  # περίμενε 3 δευτερόλεπτα
-        pg.quit()
-        sys.exit()
+    if end_time is not None:
+        # περίμενε 3 δευτερόλεπτα και μετά τερμάτισε
+        if pg.time.get_ticks() - end_time > 3000:
+            pg.quit()
+            sys.exit()
         
     pg.display.flip()
     clock.tick(60)
